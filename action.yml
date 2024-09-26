@@ -7,6 +7,10 @@ inputs:
   version:
     required: true
     description: 'Which version was released'
+  changelog_pr_mode:
+    required: false
+    default: ''
+    description: 'By default, this action expects markdown links to PRs in the changelog. You can opt to just look for different matches. Default is empty, other allowed values: SIMPLE_ROUND_BRACKETS'
 runs:
   using: 'node20'
   main: 'dist/index.js'

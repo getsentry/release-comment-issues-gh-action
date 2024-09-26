@@ -4,11 +4,14 @@ import { context, getOctokit } from "@actions/github";
 const RELEASE_COMMENT_HEADING =
   "## A PR closing this issue has just been released 🚀";
 
+type Mode = '' | 'SIMPLE_ROUND_BRACKETS';
+
 async function run() {
   const { getInput } = core;
 
   const githubToken = getInput("github_token");
   const version = getInput("version");
+  const mode = (getInput('changelog_pr_mode') || '') as Mode;
 
   if (!githubToken || !version) {
     core.debug("Skipping because github_token or version are empty.");
@@ -34,6 +37,7 @@ async function run() {
   const prNumbers = extractPrsFromReleaseBody(release.data.body, {
     repo,
     owner,
+    mode
   });
 
   if (!prNumbers.length) {
@@ -87,14 +91,18 @@ async function run() {
   }
 }
 
-/**
- *
- * @param {string} body
- * @param {{ repo: string, owner: string}} options
- * @returns {number[]}
- */
-function extractPrsFromReleaseBody(body, { repo, owner }) {
-  const regex = new RegExp(
+function extractPrsFromReleaseBody(
+  body: string,
+  { repo, owner, mode }: { repo: string; owner: string, mode: Mode }
+) {
+  // Different modes result in different regexes:
+  // 1. By default, we look for full links to PRs in the same repo
+  //    This is the safest, and captures e.g. this: ([#13527](https://github.com/getsentry/sentry-javascript/pull/13527))
+  // 2. If the mode is set to SIMPLE_ROUND_BRACKETS, we look for PR numbers in round brackets
+  //    E.g. (#13527)
+  //    Note that there may be false positives, but if we do not find a matching issue nothing bad happens either
+
+  const regex = mode === 'SIMPLE_ROUND_BRACKETS' ? /\(#(\d+)\)/gm :  new RegExp(
     `\\[#(\\d+)\\]\\(https:\\/\\/github\\.com\\/${owner}\\/${repo}\\/pull\\/(?:\\d+)\\)`,
     "gm"
   );
@@ -105,25 +113,20 @@ function extractPrsFromReleaseBody(body, { repo, owner }) {
   return prNumbers.filter((number) => !!number && !Number.isNaN(number));
 }
 
-/**
- *
- * @param {ReturnType<import('@actions/github').getOctokit>} octokit
- * @param {{ repo: string, owner: string, prNumber: number}} options
- * @returns {Promise<{ prNumber: number, issues: {id: string, number: number}[] }>}
- */
-async function getLinkedIssuesForPr(octokit, { repo, owner, prNumber }) {
-  const res = await octokit.graphql(
+async function getLinkedIssuesForPr(
+  octokit: ReturnType<typeof getOctokit>,
+  { repo, owner, prNumber }: { repo: string; owner: string; prNumber: number }
+) {
+  const res = (await octokit.graphql(
     `
 query issuesForPr($owner: String!, $repo: String!, $prNumber: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $prNumber) {
       id
       closingIssuesReferences (first: 50) {
-        edges {
-          node {
-            id
-            number
-          }
+        nodes {
+          id
+          number
         }
       }
     }
@@ -134,24 +137,32 @@ query issuesForPr($owner: String!, $repo: String!, $prNumber: Int!) {
       owner,
       repo,
     }
-  );
+  )) as {
+    repository?: {
+      pullRequest?: {
+        closingIssuesReferences: {
+          nodes: { id: string; number: number }[];
+        };
+      };
+    };
+  };
 
-  const issues = res.repository?.pullRequest?.closingIssuesReferences.edges.map(
-    (edge) => edge.node
-  );
+  const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes;
+
   return {
     prNumber,
     issues,
   };
 }
 
-/**
- *
- * @param {ReturnType<import('@actions/github').getOctokit>} octokit
- * @param {{ repo: string, owner: string, issueNumber: number}} options
- * @returns {Promise<boolean>}
- */
-async function hasExistingComment(octokit, { repo, owner, issueNumber }) {
+async function hasExistingComment(
+  octokit: ReturnType<typeof getOctokit>,
+  {
+    repo,
+    owner,
+    issueNumber,
+  }: { repo: string; owner: string; issueNumber: number }
+) {
   const { data: commentList } = await octokit.rest.issues.listComments({
     repo,
     owner,
