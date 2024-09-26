@@ -1,45 +1,53 @@
-# size-limit-release
+# release-comment-issues-gh-action
 
-This is a Github Action tied to [size-limit-action](https://github.com/getsentry/size-limit-action) which can be used to add size limit information to a Github release.
+A GitHub Action to automatically comment on issues once a release is published.
+
+It parses PRs from the release body based on a pattern, then fetches issues that these PRs closed, and posts a comment to these issues.
 
 ## Usage
 
 ```yml
-name: Add size info to release
+name: "Automation: Notify issues for release"
 on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Which version to notify issues for
+        required: false
 
 # This workflow is triggered when a release is published
-# It fetches the size-limit info from the release branch and adds it to the release
 jobs:
-  release-size-info:
+  release-comment-issues:
     runs-on: ubuntu-20.04
-    name: 'Add size-limit info to release'
+    name: 'Notify issues'
     steps:
-      # https://github.com/actions-ecosystem/action-regex-match
-      - uses: actions-ecosystem/action-regex-match@v2
-        id: head_version
-        with:
-          # Parse version from head ref, which is refs/tags/<tag_name>
-          text: ${{ github.head_ref }}
-          regex: '^refs\/tags\/([\d.]+)$'
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
 
       - name: Get version
         id: get_version
-        run: echo "version=${{ steps.head_version.outputs.match }}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.inputs.version || github.event.release.tag_name }}" >> $GITHUB_OUTPUT
 
-      - name: Update Github Release
-        uses: getsentry/size-limit-release@v2
+      - name: Comment on linked issues that are mentioned in release
+        if: steps.get_version.outputs.version != ''
+        uses: getsentry/release-comment-issues-gh-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           version: ${{ steps.get_version.outputs.version }}
-          workflow_name: 'build.yml'
 ```
 
-Note that this will not do anything if it detects that size limit information has already been added to the release.
+By default, it will parse PRs from the release in the following format:
 
-The v2 tag of this assumes that you upload your size limit data with v4 of the upload-artifacts action. 
+```
+([#13527](https://github.com/getsentry/sentry-javascript/pull/13527))
+```
 
-If you are uploading data with v3 of upload-artifacts, use the v1 tag.
+Where the owner & repo comes from where the action is run.
+
+You can also define a `changelog_pr_mode: SIMPLE_ROUND_BRACKETS` input, which will instead lead to it parsing PRs in the format `(#13527)`.

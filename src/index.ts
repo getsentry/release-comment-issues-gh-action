@@ -4,14 +4,14 @@ import { context, getOctokit } from "@actions/github";
 const RELEASE_COMMENT_HEADING =
   "## A PR closing this issue has just been released 🚀";
 
-type Mode = '' | 'SIMPLE_ROUND_BRACKETS';
+type Mode = "" | "SIMPLE_ROUND_BRACKETS";
 
 async function run() {
   const { getInput } = core;
 
   const githubToken = getInput("github_token");
   const version = getInput("version");
-  const mode = (getInput('changelog_pr_mode') || '') as Mode;
+  const mode = (getInput("changelog_pr_mode") || "") as Mode;
 
   if (!githubToken || !version) {
     core.debug("Skipping because github_token or version are empty.");
@@ -37,7 +37,7 @@ async function run() {
   const prNumbers = extractPrsFromReleaseBody(release.data.body, {
     repo,
     owner,
-    mode
+    mode,
   });
 
   if (!prNumbers.length) {
@@ -93,7 +93,7 @@ async function run() {
 
 function extractPrsFromReleaseBody(
   body: string,
-  { repo, owner, mode }: { repo: string; owner: string, mode: Mode }
+  { repo, owner, mode }: { repo: string; owner: string; mode: Mode }
 ) {
   // Different modes result in different regexes:
   // 1. By default, we look for full links to PRs in the same repo
@@ -102,10 +102,13 @@ function extractPrsFromReleaseBody(
   //    E.g. (#13527)
   //    Note that there may be false positives, but if we do not find a matching issue nothing bad happens either
 
-  const regex = mode === 'SIMPLE_ROUND_BRACKETS' ? /\(#(\d+)\)/gm :  new RegExp(
-    `\\[#(\\d+)\\]\\(https:\\/\\/github\\.com\\/${owner}\\/${repo}\\/pull\\/(?:\\d+)\\)`,
-    "gm"
-  );
+  const regex =
+    mode === "SIMPLE_ROUND_BRACKETS"
+      ? /\(#(\d+)\)/gm
+      : new RegExp(
+          `\\[#(\\d+)\\]\\(https:\\/\\/github\\.com\\/${owner}\\/${repo}\\/pull\\/(?:\\d+)\\)`,
+          "gm"
+        );
   const prNumbers = Array.from(
     new Set([...body.matchAll(regex)].map((match) => parseInt(match[1])))
   );
