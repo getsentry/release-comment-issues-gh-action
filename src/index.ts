@@ -81,12 +81,18 @@ async function run() {
 
       core.debug(`Creating comment for issue #${issue.number}`);
 
-      await octokit.rest.issues.createComment({
-        repo,
-        owner,
-        issue_number: issue.number,
-        body,
-      });
+      try {
+        await octokit.rest.issues.createComment({
+          repo,
+          owner,
+          issue_number: issue.number,
+          body,
+        });
+      } catch (error) {
+        core.error(
+          `Error creating comment for issue #${issue.number}: ${error.message}`
+        );
+      }
     }
   }
 }
@@ -120,42 +126,50 @@ async function getLinkedIssuesForPr(
   octokit: ReturnType<typeof getOctokit>,
   { repo, owner, prNumber }: { repo: string; owner: string; prNumber: number }
 ) {
-  const res = (await octokit.graphql(
-    `
-query issuesForPr($owner: String!, $repo: String!, $prNumber: Int!) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $prNumber) {
-      id
-      closingIssuesReferences (first: 50) {
-        nodes {
-          id
-          number
+  try {
+    const res = (await octokit.graphql(
+      /* GraphQL */ `
+        query issuesForPr($owner: String!, $repo: String!, $prNumber: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $prNumber) {
+              id
+              closingIssuesReferences(first: 50) {
+                nodes {
+                  id
+                  number
+                }
+              }
+            }
+          }
         }
+      `,
+      {
+        prNumber,
+        owner,
+        repo,
       }
-    }
-  }
-}`,
-    {
-      prNumber,
-      owner,
-      repo,
-    }
-  )) as {
-    repository?: {
-      pullRequest?: {
-        closingIssuesReferences: {
-          nodes: { id: string; number: number }[];
+    )) as {
+      repository?: {
+        pullRequest?: {
+          closingIssuesReferences: {
+            nodes: { id: string; number: number }[];
+          };
         };
       };
     };
-  };
 
-  const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes;
+    const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes;
 
-  return {
-    prNumber,
-    issues,
-  };
+    return {
+      prNumber,
+      issues,
+    };
+  } catch {
+    return {
+      prNumber,
+      issues: [],
+    };
+  }
 }
 
 async function hasExistingComment(
@@ -166,15 +180,23 @@ async function hasExistingComment(
     issueNumber,
   }: { repo: string; owner: string; issueNumber: number }
 ) {
-  const { data: commentList } = await octokit.rest.issues.listComments({
-    repo,
-    owner,
-    issue_number: issueNumber,
-  });
+  try {
+    const { data: commentList } = await octokit.rest.issues.listComments({
+      repo,
+      owner,
+      issue_number: issueNumber,
+    });
 
-  return commentList.some((comment) =>
-    comment.body.startsWith(RELEASE_COMMENT_HEADING)
-  );
+    return commentList.some((comment) =>
+      comment.body.startsWith(RELEASE_COMMENT_HEADING)
+    );
+  } catch (error) {
+    console.error(
+      `Error checking for existing comment for issue #${issueNumber}: ${error.message}, assuming a comment exists...`
+    );
+    // When we encounter an error here, we assume a comment exists to be safe
+    return true;
+  }
 }
 
 run();
