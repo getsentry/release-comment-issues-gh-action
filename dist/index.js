@@ -23769,7 +23769,7 @@ async function run() {
       continue;
     }
     core.debug(
-      `Linked issues for PR #${pr.prNumber}: ${pr.issues.map((issue) => `${owner}/${issue.repository.name}#${issue.number}`).join(",")}`
+      `Linked issues for PR #${pr.prNumber}: ${pr.issues.map((issue) => `${owner}/${issue.repository.name}#${issue.number}`).join(", ")}`
     );
     for (const issue of pr.issues) {
       const issueRepo = issue.repository.name;

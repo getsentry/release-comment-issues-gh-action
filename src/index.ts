@@ -62,7 +62,7 @@ async function run() {
     core.debug(
       `Linked issues for PR #${pr.prNumber}: ${pr.issues
         .map((issue) => `${owner}/${issue.repository.name}#${issue.number}`)
-        .join(",")}`
+        .join(", ")}`
     );
 
     for (const issue of pr.issues) {
