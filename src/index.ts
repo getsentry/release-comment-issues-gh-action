@@ -66,31 +66,37 @@ async function run() {
     );
 
     for (const issue of pr.issues) {
+      // Use issue's own repository information if available, otherwise fallback to the PR's repo
+      const issueOwner = issue.repository?.owner?.login || owner;
+      const issueRepo = issue.repository?.name || repo;
+
+      core.debug(`Processing issue #${issue.number} in ${issueOwner}/${issueRepo}`);
+
       if (
         await hasExistingComment(octokit, {
-          repo,
-          owner,
+          repo: issueRepo,
+          owner: issueOwner,
           issueNumber: issue.number,
         })
       ) {
-        core.debug(`Comment already exists for issue #${issue.number}`);
+        core.debug(`Comment already exists for issue #${issue.number} in ${issueOwner}/${issueRepo}`);
         continue;
       }
 
-      const body = `${RELEASE_COMMENT_HEADING}\n\nThis issue was referenced by PR #${pr.prNumber}, which was included in the [${version} release](https://github.com/${owner}/${repo}/releases/tag/${version}).`;
+      const body = `${RELEASE_COMMENT_HEADING}\n\nThis issue was referenced by PR #${pr.prNumber} in ${owner}/${repo}, which was included in the [${version} release](https://github.com/${owner}/${repo}/releases/tag/${version}).`;
 
-      core.debug(`Creating comment for issue #${issue.number}`);
+      core.debug(`Creating comment for issue #${issue.number} in ${issueOwner}/${issueRepo}`);
 
       try {
         await octokit.rest.issues.createComment({
-          repo,
-          owner,
+          repo: issueRepo,
+          owner: issueOwner,
           issue_number: issue.number,
           body,
         });
       } catch (error) {
         core.error(
-          `Error creating comment for issue #${issue.number}: ${error.message}`
+          `Error creating comment for issue #${issue.number} in ${issueOwner}/${issueRepo}: ${error.message}`
         );
       }
     }
@@ -137,6 +143,12 @@ async function getLinkedIssuesForPr(
                 nodes {
                   id
                   number
+                  repository {
+                    name
+                    owner {
+                      login
+                    }
+                  }
                 }
               }
             }
@@ -152,19 +164,29 @@ async function getLinkedIssuesForPr(
       repository?: {
         pullRequest?: {
           closingIssuesReferences: {
-            nodes: { id: string; number: number }[];
+            nodes: {
+              id: string;
+              number: number;
+              repository: {
+                name: string;
+                owner: {
+                  login: string;
+                };
+              };
+            }[];
           };
         };
       };
     };
 
-    const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes;
+    const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes || [];
 
     return {
       prNumber,
       issues,
     };
-  } catch {
+  } catch (error) {
+    core.error(`Error fetching linked issues for PR #${prNumber}: ${error.message}`);
     return {
       prNumber,
       issues: [],
@@ -191,8 +213,8 @@ async function hasExistingComment(
       comment.body.startsWith(RELEASE_COMMENT_HEADING)
     );
   } catch (error) {
-    console.error(
-      `Error checking for existing comment for issue #${issueNumber}: ${error.message}, assuming a comment exists...`
+    core.error(
+      `Error checking for existing comment for issue #${issueNumber} in ${owner}/${repo}: ${error.message}, assuming a comment exists...`
     );
     // When we encounter an error here, we assume a comment exists to be safe
     return true;
