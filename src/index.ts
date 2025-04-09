@@ -61,14 +61,16 @@ async function run() {
 
     core.debug(
       `Linked issues for PR #${pr.prNumber}: ${pr.issues
-        .map((issue) => issue.number)
-        .join(",")}`
+        .map((issue) => `${owner}/${issue.repository.name}#${issue.number}`)
+        .join(", ")}`
     );
 
     for (const issue of pr.issues) {
+      const issueRepo = issue.repository.name;
       if (
         await hasExistingComment(octokit, {
-          repo,
+          repo: issueRepo,
+          // We enforce that owner of all linked issues is the same as the owner of the repo
           owner,
           issueNumber: issue.number,
         })
@@ -77,20 +79,22 @@ async function run() {
         continue;
       }
 
-      const body = `${RELEASE_COMMENT_HEADING}\n\nThis issue was referenced by PR #${pr.prNumber}, which was included in the [${version} release](https://github.com/${owner}/${repo}/releases/tag/${version}).`;
+      const prLink = repo === issueRepo ? `#${pr.prNumber}` : `[#${pr.prNumber}](https://github.com/${owner}/${repo}/pull/${pr.prNumber})`;
+
+      const body = `${RELEASE_COMMENT_HEADING}\n\nThis issue was referenced by PR ${prLink}, which was included in the [${version} release](https://github.com/${owner}/${repo}/releases/tag/${version}).`;
 
       core.debug(`Creating comment for issue #${issue.number}`);
 
       try {
         await octokit.rest.issues.createComment({
-          repo,
+          repo: issueRepo,
           owner,
           issue_number: issue.number,
           body,
         });
       } catch (error) {
         core.error(
-          `Error creating comment for issue #${issue.number}: ${error.message}`
+          `Error creating comment for issue ${owner}/${issueRepo}#${issue.number}: ${error.message}`
         );
       }
     }
@@ -137,8 +141,13 @@ async function getLinkedIssuesForPr(
                 nodes {
                   id
                   number
+                  repository {
+                    name
+                    owner {
+                      login
+                    }
+                  }
                 }
-              }
             }
           }
         }
@@ -152,13 +161,25 @@ async function getLinkedIssuesForPr(
       repository?: {
         pullRequest?: {
           closingIssuesReferences: {
-            nodes: { id: string; number: number }[];
+            nodes: {
+              id: string;
+              number: number;
+              repository: {
+                name: string;
+                owner: {
+                  login: string;
+                };
+              };
+            }[];
           };
         };
       };
     };
 
-    const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes;
+    const issues =
+      res.repository?.pullRequest?.closingIssuesReferences.nodes.filter(
+        ({ repository }) => repository.owner.login === owner
+      );
 
     return {
       prNumber,
@@ -192,7 +213,7 @@ async function hasExistingComment(
     );
   } catch (error) {
     console.error(
-      `Error checking for existing comment for issue #${issueNumber}: ${error.message}, assuming a comment exists...`
+      `Error checking for existing comment for issue ${owner}/${repo}#${issueNumber}: ${error.message}, assuming a comment exists...`
     );
     // When we encounter an error here, we assume a comment exists to be safe
     return true;
