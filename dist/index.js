@@ -23826,7 +23826,6 @@ async function getLinkedIssuesForPr(octokit, { repo, owner, prNumber }) {
                   id
                   number
                   repository {
-                    id
                     name
                     owner {
                       login

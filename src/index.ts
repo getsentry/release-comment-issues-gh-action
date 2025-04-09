@@ -145,7 +145,6 @@ async function getLinkedIssuesForPr(
                   id
                   number
                   repository {
-                    id
                     name
                     owner {
                       login
@@ -170,7 +169,6 @@ async function getLinkedIssuesForPr(
               id: string;
               number: number;
               repository?: {
-                id: number;
                 name: string;
                 owner: {
                   login: string;
