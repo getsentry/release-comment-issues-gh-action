@@ -23832,6 +23832,7 @@ async function getLinkedIssuesForPr(octokit, { repo, owner, prNumber }) {
                     }
                   }
                 }
+              }
             }
           }
         }
@@ -23843,13 +23844,16 @@ async function getLinkedIssuesForPr(octokit, { repo, owner, prNumber }) {
       }
     );
     const issues = res.repository?.pullRequest?.closingIssuesReferences.nodes.filter(
-      ({ repository }) => repository.owner.login === owner
+      ({ repository }) => repository?.owner?.login === owner
     );
     return {
       prNumber,
       issues
     };
-  } catch {
+  } catch (error2) {
+    core.error(
+      `Error fetching linked issues for PR ${owner}/${repo}#${prNumber}: ${error2.message}`
+    );
     return {
       prNumber,
       issues: []

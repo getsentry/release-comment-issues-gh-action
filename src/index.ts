@@ -79,7 +79,10 @@ async function run() {
         continue;
       }
 
-      const prLink = repo === issueRepo ? `#${pr.prNumber}` : `[#${pr.prNumber}](https://github.com/${owner}/${repo}/pull/${pr.prNumber})`;
+      const prLink =
+        repo === issueRepo
+          ? `#${pr.prNumber}`
+          : `[#${pr.prNumber}](https://github.com/${owner}/${repo}/pull/${pr.prNumber})`;
 
       const body = `${RELEASE_COMMENT_HEADING}\n\nThis issue was referenced by PR ${prLink}, which was included in the [${version} release](https://github.com/${owner}/${repo}/releases/tag/${version}).`;
 
@@ -148,6 +151,7 @@ async function getLinkedIssuesForPr(
                     }
                   }
                 }
+              }
             }
           }
         }
@@ -164,7 +168,7 @@ async function getLinkedIssuesForPr(
             nodes: {
               id: string;
               number: number;
-              repository: {
+              repository?: {
                 name: string;
                 owner: {
                   login: string;
@@ -178,14 +182,18 @@ async function getLinkedIssuesForPr(
 
     const issues =
       res.repository?.pullRequest?.closingIssuesReferences.nodes.filter(
-        ({ repository }) => repository.owner.login === owner
+        ({ repository }) => repository?.owner?.login === owner
       );
 
     return {
       prNumber,
       issues,
     };
-  } catch {
+  } catch (error) {
+    core.error(
+      `Error fetching linked issues for PR ${owner}/${repo}#${prNumber}: ${error.message}`
+    );
+
     return {
       prNumber,
       issues: [],
