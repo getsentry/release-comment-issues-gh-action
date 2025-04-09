@@ -70,6 +70,7 @@ async function run() {
       if (
         await hasExistingComment(octokit, {
           repo: issueRepo,
+          // We enforce that owner of all linked issues is the same as the owner of the repo
           owner,
           issueNumber: issue.number,
         })
